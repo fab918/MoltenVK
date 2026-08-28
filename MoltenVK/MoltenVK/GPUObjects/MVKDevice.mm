@@ -2665,6 +2665,15 @@ void MVKPhysicalDevice::initMetalFeatures() {
 		setMSLVersion(2, 4);
 	}
 
+#if MVK_MACOS
+	if (getMVKConfig().useMSL3_1) {
+		if (mvkOSVersionIsAtLeast(14.0)) {
+			_metalFeatures.mslVersionEnum = MTLLanguageVersion3_1;
+			setMSLVersion(3, 1);
+		}
+	}
+#endif
+
 	_metalFeatures.programmableSamplePositions = _mtlDevice.areProgrammableSamplePositionsSupported;
 	_metalFeatures.rasterOrderGroups = _mtlDevice.areRasterOrderGroupsSupported;
 	_metalFeatures.pullModelInterpolation = _mtlDevice.supportsPullModelInterpolation;

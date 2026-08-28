@@ -350,3 +350,7 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
 #ifndef MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES
 #   define MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES 0
 #endif
+
+#ifndef MVK_CONFIG_USE_MSL_3_1
+#	define MVK_CONFIG_USE_MSL_3_1	1
+#endif
