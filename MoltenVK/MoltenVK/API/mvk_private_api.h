@@ -247,6 +247,7 @@ typedef struct {
 	const char* shaderDumpDir;                                                 /**< MVK_CONFIG_SHADER_DUMP_DIR */
 	VkBool32 shaderLogEstimatedGLSL;                                           /**< MVK_CONFIG_SHADER_LOG_ESTIMATED_GLSL */
 	VkBool32 liveCheckAllResources;                                            /**< MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES */
+	VkBool32 useMSL3_1;                                                        /**< MVK_CONFIG_USE_MSL_3_1 */
 } MVKConfiguration;
 
 // Legacy support for renamed struct elements.
