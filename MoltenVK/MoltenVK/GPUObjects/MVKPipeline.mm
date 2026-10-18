@@ -2504,10 +2504,37 @@ MVKShaderLibrary* MVKPipelineCache::getShaderLibrary(SPIRVToMSLConversionConfigu
 													 uint64_t startTime) {
 	if (_isExternallySynchronized) {
 		return getShaderLibraryImpl(pContext, shaderModule, pipeline, pShaderFeedback, startTime);
-	} else {
-		lock_guard<mutex> lock(_shaderCacheLock);
-		return getShaderLibraryImpl(pContext, shaderModule, pipeline, pShaderFeedback, startTime);
 	}
+
+	// Only look up and insert under the lock. Converting and compiling a new library
+	// can take a long time, and doing it under the lock serializes every pipeline build.
+	MVKShaderLibraryCache* slCache;
+	{
+		lock_guard<mutex> lock(_shaderCacheLock);
+		slCache = getShaderLibraryCache(shaderModule->getKey());
+		MVKShaderLibrary* shLib = slCache->findShaderLibrary(pContext, pShaderFeedback, startTime);
+		if (shLib) {
+			if (pShaderFeedback) { mvkEnableFlags(pShaderFeedback->flags, VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT); }
+			return shLib;
+		}
+	}
+	if (pipeline->shouldFailOnPipelineCompileRequired()) { return nullptr; }
+
+	SPIRVToMSLConversionResult conversionResult;
+	if ( !shaderModule->convert(pContext, conversionResult) ) { return nullptr; }
+	MVKShaderLibrary* newLib = new MVKShaderLibrary(this, conversionResult);
+	if (pShaderFeedback) { pShaderFeedback->duration += mvkGetElapsedNanoseconds(startTime); }
+
+	lock_guard<mutex> lock(_shaderCacheLock);
+	// Another thread may have added the same library in the meantime
+	MVKShaderLibrary* shLib = slCache->findShaderLibrary(pContext);
+	if (shLib) {
+		newLib->destroy();
+		return shLib;
+	}
+	slCache->addShaderLibrary(pContext, newLib);
+	markDirty();
+	return newLib;
 }
 
 MVKShaderLibrary* MVKPipelineCache::getShaderLibraryImpl(SPIRVToMSLConversionConfiguration* pContext,
