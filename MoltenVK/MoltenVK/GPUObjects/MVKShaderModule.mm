@@ -365,6 +365,11 @@ MVKShaderLibrary* MVKShaderLibraryCache::addShaderLibrary(const SPIRVToMSLConver
 	return shLib;
 }
 
+// Adds a shader library built by the caller.
+void MVKShaderLibraryCache::addShaderLibrary(const SPIRVToMSLConversionConfiguration* pShaderConfig, MVKShaderLibrary* shLib) {
+	_shaderLibraries.emplace_back(*pShaderConfig, shLib);
+}
+
 // Adds and returns a new shader library configured from contents read from a pipeline cache.
 MVKShaderLibrary* MVKShaderLibraryCache::addShaderLibrary(const SPIRVToMSLConversionConfiguration* pShaderConfig,
 														  const SPIRVToMSLConversionResultInfo& resultInfo,

@@ -201,6 +201,7 @@ protected:
 										uint64_t startTime = 0);
 	MVKShaderLibrary* addShaderLibrary(const mvk::SPIRVToMSLConversionConfiguration* pShaderConfig,
 									   const mvk::SPIRVToMSLConversionResult& conversionResult);
+	void addShaderLibrary(const mvk::SPIRVToMSLConversionConfiguration* pShaderConfig, MVKShaderLibrary* shLib);
 	MVKShaderLibrary* addShaderLibrary(const mvk::SPIRVToMSLConversionConfiguration* pShaderConfig,
 									   const mvk::SPIRVToMSLConversionResultInfo& resultInfo,
 									   const MVKCompressor<std::string> compressedMSL);
