@@ -1573,10 +1573,9 @@ static void signalAndUntrack(const MVKSwapchainSignaler& signaler) {
 
 VkResult MVKPresentableSwapchainImage::acquireAndSignalWhenAvailable(MVKSemaphore* semaphore, MVKFence* fence) {
 
-	// Now that this image is being acquired, release the existing drawable and its texture.
-	// This is not done earlier so the texture is retained for any post-processing such as screen captures, etc.
-	releaseMetalDrawable();
-
+	// The drawable is not released here. With asynchronous queue submissions, the previous
+	// present of this image may still be waiting on the queue and use it. Presenting hands
+	// the drawable over, so the next use of this image retrieves a new one.
 	lock_guard<mutex> lock(_availabilityLock);
 
 	// Upon acquisition, update acquisition ID immediately, to move it to the back of the chain,
@@ -1618,6 +1617,7 @@ id<CAMetalDrawable> MVKPresentableSwapchainImage::getCAMetalDrawable() {
 
 	if (_mtlTextureHeadless) { return nil; }	// If headless, there is no drawable.
 
+	lock_guard<mutex> lock(_drawableLock);
 	if ( !_mtlDrawable ) {
 		@autoreleasepool {
 			bool hasInvalidFormat = false;
@@ -1627,7 +1627,7 @@ id<CAMetalDrawable> MVKPresentableSwapchainImage::getCAMetalDrawable() {
 				_mtlDrawable = [_swapchain->getCAMetalLayer().nextDrawable retain];	// retained
 				addPerformanceInterval(getPerformanceStats().queue.retrieveCAMetalDrawable, startTime);
 				hasInvalidFormat = _mtlDrawable && !_mtlDrawable.texture.pixelFormat;
-				if (hasInvalidFormat) { releaseMetalDrawable(); }
+				if (hasInvalidFormat) { [_mtlDrawable release]; _mtlDrawable = nil; }
 			}
 			if (hasInvalidFormat) {
 				setConfigurationResult(reportError(VK_ERROR_OUT_OF_DATE_KHR, "CAMetalDrawable with valid format could not be acquired after %d attempts.", attemptCnt));
@@ -1654,7 +1654,12 @@ VkResult MVKPresentableSwapchainImage::presentCAMetalDrawable(id<MTLCommandBuffe
 	// MTLCommandBuffer scheduled-handler than it is to call MTLCommandBuffer presentDrawable:.
 	// But get current drawable now, intead of in handler, because a new drawable might be acquired by then.
 	// Attach present handler before presenting to avoid race condition.
+	// The present takes over the reference held by this image, which is released on completion.
 	id<CAMetalDrawable> mtlDrwbl = getCAMetalDrawable();
+	{
+		lock_guard<mutex> lock(_drawableLock);
+		_mtlDrawable = nil;
+	}
 	MVKSwapchainSignaler signaler = getPresentationSignaler();
 	[mtlCmdBuff addScheduledHandler: ^(id<MTLCommandBuffer> mcb) {
 
@@ -1673,13 +1678,12 @@ VkResult MVKPresentableSwapchainImage::presentCAMetalDrawable(id<MTLCommandBuffe
 	}];
 
 	// Ensure this image, the drawable, and the present fence are not destroyed while
-	// awaiting MTLCommandBuffer completion. We retain the drawable separately because
-	// a new drawable might be acquired by this image by then.
+	// awaiting MTLCommandBuffer completion. The drawable reference was taken over above
+	// because a new drawable might be acquired by this image by then.
 	// Signal the fence and notify the swapchain that the present has completed
 	// from this callback, because the last one or two presentation completion
 	// callbacks can occasionally stall.
 	retain();
-	[mtlDrwbl retain];
 	auto* fence = presentInfo.fence;
 	if (fence) { fence->retain(); }
 	[mtlCmdBuff addCompletedHandler: ^(id<MTLCommandBuffer> mcb) {
@@ -1769,7 +1773,8 @@ void MVKPresentableSwapchainImage::endPresentation(const MVKImagePresentInfo& pr
 
 // Releases the CAMetalDrawable underlying this image.
 void MVKPresentableSwapchainImage::releaseMetalDrawable() {
-    [_mtlDrawable release];
+	lock_guard<mutex> lock(_drawableLock);
+	[_mtlDrawable release];
 	_mtlDrawable = nil;
 }
 
