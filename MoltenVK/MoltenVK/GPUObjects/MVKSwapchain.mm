@@ -285,6 +285,29 @@ void MVKSwapchain::notifyPresentComplete(const MVKImagePresentInfo& presentInfo)
 	}
 }
 
+// Retrieving a drawable holds a lock of the CAMetalLayer until one is free, which blocks presents
+// meanwhile. With asynchronous queue submissions, the drawables of previous images may still wait
+// for their present, so none would be freed before the retrieval times out after one second.
+// Wait for them to be presented first, so one is freed when the display moves on.
+void MVKSwapchain::waitToRetrieveDrawable() {
+	std::unique_lock lock(_drawableUseLock);
+	_drawableUseCondVar.wait_for(lock, std::chrono::seconds(1), [this] { return _unpresentedDrawableCount == 0; });
+}
+
+// Counts a drawable that was retrieved and is not presented or released yet.
+void MVKSwapchain::beginDrawableUse() {
+	std::lock_guard lock(_drawableUseLock);
+	_unpresentedDrawableCount++;
+}
+
+void MVKSwapchain::endDrawableUse() {
+	{
+		std::lock_guard lock(_drawableUseLock);
+		if (_unpresentedDrawableCount) { _unpresentedDrawableCount--; }
+	}
+	_drawableUseCondVar.notify_all();
+}
+
 // Because of a regression in Metal, the most recent one or two presentations may not complete
 // and call back. To work around this, if there are any uncompleted presentations, change the
 // drawableSize of the CAMetalLayer, which will trigger presentation completion and callbacks.

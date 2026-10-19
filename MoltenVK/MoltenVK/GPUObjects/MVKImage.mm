@@ -1619,6 +1619,7 @@ id<CAMetalDrawable> MVKPresentableSwapchainImage::getCAMetalDrawable() {
 
 	lock_guard<mutex> lock(_drawableLock);
 	if ( !_mtlDrawable ) {
+		_swapchain->waitToRetrieveDrawable();
 		@autoreleasepool {
 			bool hasInvalidFormat = false;
 			uint32_t attemptCnt = _swapchain->getImageCount();	// Attempt a resonable number of times
@@ -1635,6 +1636,7 @@ id<CAMetalDrawable> MVKPresentableSwapchainImage::getCAMetalDrawable() {
 				setConfigurationResult(reportError(VK_ERROR_OUT_OF_POOL_MEMORY, "CAMetalDrawable could not be acquired after %d attempts.", attemptCnt));
 			}
 		}
+		if (_mtlDrawable) { _swapchain->beginDrawableUse(); }
 	}
 	return _mtlDrawable;
 }
@@ -1675,6 +1677,7 @@ VkResult MVKPresentableSwapchainImage::presentCAMetalDrawable(id<MTLCommandBuffe
 		} else {
 			[mtlDrwbl present];
 		}
+		if (mtlDrwbl) { endDrawableUse(); }
 	}];
 
 	// Ensure this image, the drawable, and the present fence are not destroyed while
@@ -1774,8 +1777,15 @@ void MVKPresentableSwapchainImage::endPresentation(const MVKImagePresentInfo& pr
 // Releases the CAMetalDrawable underlying this image.
 void MVKPresentableSwapchainImage::releaseMetalDrawable() {
 	lock_guard<mutex> lock(_drawableLock);
+	if (_mtlDrawable) { endDrawableUse(); }
 	[_mtlDrawable release];
 	_mtlDrawable = nil;
+}
+
+// The swapchain may have been destroyed when the drawable is presented.
+void MVKPresentableSwapchainImage::endDrawableUse() {
+	lock_guard<mutex> lock(_detachmentLock);
+	if (_swapchain) { _swapchain->endDrawableUse(); }
 }
 
 // Signal, untrack, and release any signalers that are tracking.

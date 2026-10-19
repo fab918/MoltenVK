@@ -125,6 +125,9 @@ protected:
 	void endPresentation(const MVKImagePresentInfo& presentInfo, uint64_t beginPresentTime, uint64_t actualPresentTime = 0);
 	void notifyPresentComplete(const MVKImagePresentInfo& presentInfo);
 	void forceUnpresentedImageCompletion();
+	void waitToRetrieveDrawable();
+	void beginDrawableUse();
+	void endDrawableUse();
 
 	MVKSurface* _surface = nullptr;
     MVKWatermark* _licenseWatermark = nullptr;
@@ -140,6 +143,9 @@ protected:
 	uint64_t _lastFrameTime = 0;
 	VkExtent2D _imageExtent = {0, 0};
 	std::atomic<uint32_t> _unpresentedImageCount = 0;
+	std::mutex _drawableUseLock;
+	std::condition_variable _drawableUseCondVar;
+	uint32_t _unpresentedDrawableCount = 0;
 	uint32_t _currentPerfLogFrameCount = 0;
 	uint32_t _presentHistoryCount = 0;
 	uint32_t _presentHistoryIndex = 0;
