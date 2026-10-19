@@ -29,6 +29,7 @@
 #include "MVKInlineArray.h"
 #include <MoltenVKShaderConverter/SPIRVReflection.h>
 #include <MoltenVKShaderConverter/SPIRVToMSLConverter.h>
+#include <condition_variable>
 #include <unordered_map>
 #include <unordered_set>
 #include <ostream>
@@ -519,9 +520,16 @@ protected:
 	VkResult mergePipelineCachesImpl(uint32_t srcCacheCount, const VkPipelineCache* pSrcCaches);
 	void markDirty();
 
+	struct PendingShaderLibrary {
+		MVKShaderModuleKey shaderModuleKey;
+		mvk::SPIRVToMSLConversionConfiguration shaderConfig;
+	};
+
 	std::unordered_map<MVKShaderModuleKey, MVKShaderLibraryCache*> _shaderCache;
+	std::vector<const PendingShaderLibrary*> _pendingShaderLibraries;
 	size_t _dataSize = 0;
 	std::mutex _shaderCacheLock;
+	std::condition_variable _pendingShaderLibrariesDone;
 	bool _isExternallySynchronized = false;
 	bool _isMergeInternallySynchronized = false;
 };
