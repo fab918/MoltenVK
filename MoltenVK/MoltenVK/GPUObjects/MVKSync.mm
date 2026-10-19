@@ -115,12 +115,21 @@ MVKSemaphoreSingleQueue::~MVKSemaphoreSingleQueue() = default;
 #pragma mark -
 #pragma mark MVKSemaphoreMTLEvent
 
-void MVKSemaphoreMTLEvent::encodeWait(id<MTLCommandBuffer> mtlCmdBuff, uint64_t) {
-	if (mtlCmdBuff) { [mtlCmdBuff encodeWaitForEvent: _mtlEvent value: _mtlEventValue++]; }
+void MVKSemaphoreMTLEvent::encodeWait(id<MTLCommandBuffer> mtlCmdBuff, uint64_t value) {
+	if (mtlCmdBuff) { [mtlCmdBuff encodeWaitForEvent: _mtlEvent value: value]; }
 }
 
-void MVKSemaphoreMTLEvent::encodeSignal(id<MTLCommandBuffer> mtlCmdBuff, uint64_t) {
-	if (mtlCmdBuff) { [mtlCmdBuff encodeSignalEvent: _mtlEvent value: _mtlEventValue]; }
+void MVKSemaphoreMTLEvent::encodeSignal(id<MTLCommandBuffer> mtlCmdBuff, uint64_t value) {
+	if (mtlCmdBuff) { [mtlCmdBuff encodeSignalEvent: _mtlEvent value: value]; }
+}
+
+// A wait consumes the current value, which the matching signal or deferred signal was given.
+uint64_t MVKSemaphoreMTLEvent::reserveWait(uint64_t) {
+	return _mtlEventValue++;
+}
+
+uint64_t MVKSemaphoreMTLEvent::reserveSignal(uint64_t) {
+	return _mtlEventValue;
 }
 
 uint64_t MVKSemaphoreMTLEvent::deferSignal() {

@@ -175,6 +175,16 @@ public:
 	virtual uint64_t deferSignal() = 0;
 
 	/**
+	 * Reserves the value a wait or signal operation of a queue submission will use.
+	 *
+	 * Called on the submitting thread when the submission is created, so the values follow the
+	 * API order even when the submission is encoded later on another thread. Returns the value
+	 * to pass to encodeWait() or encodeSignal(). By default, the value given is returned unchanged.
+	 */
+	virtual uint64_t reserveWait(uint64_t value) { return value; }
+	virtual uint64_t reserveSignal(uint64_t value) { return value; }
+
+	/**
 	 * Complete a deferred signal operation.
 	 *
 	 * This is the other half of the deferSignal() method. The token that was returned
@@ -240,6 +250,8 @@ public:
 	void encodeSignal(id<MTLCommandBuffer> mtlCmdBuff, uint64_t value) override;
 	uint64_t deferSignal() override;
 	void encodeDeferredSignal(id<MTLCommandBuffer> mtlCmdBuff, uint64_t deferToken) override;
+	uint64_t reserveWait(uint64_t value) override;
+	uint64_t reserveSignal(uint64_t value) override;
 	bool isUsingCommandEncoding() override { return true; }
 
 	MVKSemaphoreMTLEvent(MVKDevice* device,
