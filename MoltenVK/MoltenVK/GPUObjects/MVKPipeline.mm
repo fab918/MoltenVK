@@ -2496,6 +2496,24 @@ MVKComputePipeline::~MVKComputePipeline() {
 #pragma mark -
 #pragma mark MVKPipelineCache
 
+// Returns whether two configurations, before conversion marks what their shader uses,
+// would build the same library.
+static bool isSameShaderConfig(const SPIRVToMSLConversionConfiguration& a, const SPIRVToMSLConversionConfiguration& b) {
+	auto isSame = [](const auto& va, const auto& vb) {
+		if (va.size() != vb.size()) { return false; }
+		for (size_t i = 0; i < va.size(); i++) {
+			if ( !va[i].matches(vb[i]) ) { return false; }
+		}
+		return true;
+	};
+	return (a.options.matches(b.options) &&
+			isSame(a.shaderInputs, b.shaderInputs) &&
+			isSame(a.shaderOutputs, b.shaderOutputs) &&
+			isSame(a.resourceBindings, b.resourceBindings) &&
+			isSame(a.dynamicBufferDescriptors, b.dynamicBufferDescriptors) &&
+			a.discreteDescriptorSets == b.discreteDescriptorSets);
+}
+
 // Return a shader library from the specified shader conversion configuration sourced from the specified shader module.
 MVKShaderLibrary* MVKPipelineCache::getShaderLibrary(SPIRVToMSLConversionConfiguration* pContext,
 													 MVKShaderModule* shaderModule,
@@ -2508,24 +2526,40 @@ MVKShaderLibrary* MVKPipelineCache::getShaderLibrary(SPIRVToMSLConversionConfigu
 
 	// Only look up and insert under the lock. Converting and compiling a new library
 	// can take a long time, and doing it under the lock serializes every pipeline build.
+	// A library another thread is already building for the same configuration is waited
+	// for instead of being built a second time.
+	const MVKShaderModuleKey smKey = shaderModule->getKey();
 	MVKShaderLibraryCache* slCache;
+	PendingShaderLibrary pending{smKey, *pContext};
 	{
-		lock_guard<mutex> lock(_shaderCacheLock);
-		slCache = getShaderLibraryCache(shaderModule->getKey());
-		MVKShaderLibrary* shLib = slCache->findShaderLibrary(pContext, pShaderFeedback, startTime);
-		if (shLib) {
-			if (pShaderFeedback) { mvkEnableFlags(pShaderFeedback->flags, VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT); }
-			return shLib;
+		unique_lock<mutex> lock(_shaderCacheLock);
+		slCache = getShaderLibraryCache(smKey);
+		while (true) {
+			MVKShaderLibrary* shLib = slCache->findShaderLibrary(pContext, pShaderFeedback, startTime);
+			if (shLib) {
+				if (pShaderFeedback) { mvkEnableFlags(pShaderFeedback->flags, VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT); }
+				return shLib;
+			}
+			if (pipeline->shouldFailOnPipelineCompileRequired()) { return nullptr; }
+			bool isPending = std::any_of(_pendingShaderLibraries.begin(), _pendingShaderLibraries.end(), [&](const PendingShaderLibrary* other) {
+				return other->shaderModuleKey == smKey && isSameShaderConfig(other->shaderConfig, *pContext);
+			});
+			if ( !isPending ) { break; }
+			_pendingShaderLibrariesDone.wait(lock);
 		}
+		_pendingShaderLibraries.push_back(&pending);
 	}
-	if (pipeline->shouldFailOnPipelineCompileRequired()) { return nullptr; }
 
 	SPIRVToMSLConversionResult conversionResult;
-	if ( !shaderModule->convert(pContext, conversionResult) ) { return nullptr; }
-	MVKShaderLibrary* newLib = new MVKShaderLibrary(this, conversionResult);
-	if (pShaderFeedback) { pShaderFeedback->duration += mvkGetElapsedNanoseconds(startTime); }
+	bool wasConverted = shaderModule->convert(pContext, conversionResult);
+	MVKShaderLibrary* newLib = wasConverted ? new MVKShaderLibrary(this, conversionResult) : nullptr;
+	if (newLib && pShaderFeedback) { pShaderFeedback->duration += mvkGetElapsedNanoseconds(startTime); }
 
 	lock_guard<mutex> lock(_shaderCacheLock);
+	mvkRemoveFirstOccurance(_pendingShaderLibraries, &pending);
+	_pendingShaderLibrariesDone.notify_all();
+	if ( !newLib ) { return nullptr; }
+
 	// Another thread may have added the same library in the meantime
 	MVKShaderLibrary* shLib = slCache->findShaderLibrary(pContext);
 	if (shLib) {
