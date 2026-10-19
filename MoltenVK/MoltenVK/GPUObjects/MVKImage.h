@@ -501,6 +501,7 @@ protected:
 	id<CAMetalDrawable> getCAMetalDrawable();
 	void addPresentedHandler(id<CAMetalDrawable> mtlDrawable, MVKImagePresentInfo presentInfo, MVKSwapchainSignaler signaler);
 	void releaseMetalDrawable();
+	void endDrawableUse();
 	MVKSwapchainImageAvailability getAvailability();
 	void makeAvailable();
 	VkResult acquireAndSignalWhenAvailable(MVKSemaphore* semaphore, MVKFence* fence);
