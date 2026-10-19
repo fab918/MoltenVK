@@ -373,6 +373,14 @@ void MVKSemaphoreSubmitInfo::encodeSignal(id<MTLCommandBuffer> mtlCmdBuff) {
 	if (_semaphore) { _semaphore->encodeSignal(mtlCmdBuff, value); }
 }
 
+void MVKSemaphoreSubmitInfo::reserveWait() {
+	if (_semaphore) { value = _semaphore->reserveWait(value); }
+}
+
+void MVKSemaphoreSubmitInfo::reserveSignal() {
+	if (_semaphore) { value = _semaphore->reserveSignal(value); }
+}
+
 MVKSemaphoreSubmitInfo::MVKSemaphoreSubmitInfo(const VkSemaphoreSubmitInfo& semaphoreSubmitInfo) :
 	_semaphore((MVKSemaphore*)semaphoreSubmitInfo.semaphore),
 	value(semaphoreSubmitInfo.value),
@@ -606,6 +614,7 @@ MVKQueueCommandBufferSubmission::MVKQueueCommandBufferSubmission(MVKQueue* queue
 			_signalSemaphores.emplace_back(pSubmit->pSignalSemaphoreInfos[i]);
 		}
 	}
+	reserveSemaphoreValues();
 }
 
 // On device loss, the fence and signal semaphores may be signalled early, and they might then
@@ -655,6 +664,15 @@ MVKQueueCommandBufferSubmission::MVKQueueCommandBufferSubmission(MVKQueue* queue
 			}
         }
     }
+	reserveSemaphoreValues();
+}
+
+// With asynchronous queue submissions, the submission is encoded later on another thread,
+// while semaphores keep being used by the app, such as by vkAcquireNextImageKHR().
+// Reserve the semaphore values now, so they follow the order of the API calls.
+void MVKQueueCommandBufferSubmission::reserveSemaphoreValues() {
+	for (auto& ws : _waitSemaphores) { ws.reserveWait(); }
+	for (auto& ss : _signalSemaphores) { ss.reserveSignal(); }
 }
 
 MVKQueueCommandBufferSubmission::~MVKQueueCommandBufferSubmission() {
@@ -769,6 +787,9 @@ void MVKQueuePresentSurfaceSubmission::finish() {
 MVKQueuePresentSurfaceSubmission::MVKQueuePresentSurfaceSubmission(MVKQueue* queue,
 																   const VkPresentInfoKHR* pPresentInfo)
 	: MVKQueueSubmission(queue, pPresentInfo->waitSemaphoreCount, pPresentInfo->pWaitSemaphores, nullptr) {
+
+	// Reserve the semaphore values now. See MVKQueueCommandBufferSubmission::reserveSemaphoreValues().
+	for (auto& ws : _waitSemaphores) { ws.reserveWait(); }
 
 	const VkPresentTimesInfoGOOGLE* pPresentTimesInfo = nullptr;
 	const VkSwapchainPresentFenceInfoKHR* pPresentFenceInfo = nullptr;

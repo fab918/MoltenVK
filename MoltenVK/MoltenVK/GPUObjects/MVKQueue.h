@@ -180,6 +180,8 @@ public:
 
 	void encodeWait(id<MTLCommandBuffer> mtlCmdBuff);
 	void encodeSignal(id<MTLCommandBuffer> mtlCmdBuff);
+	void reserveWait();
+	void reserveSignal();
 	MVKSemaphoreSubmitInfo(const VkSemaphoreSubmitInfo& semaphoreSubmitInfo);
 	MVKSemaphoreSubmitInfo(const VkSemaphore semaphore, VkPipelineStageFlags stageMask);
 	MVKSemaphoreSubmitInfo(const MVKSemaphoreSubmitInfo& other);
@@ -266,6 +268,7 @@ protected:
 	void setActiveMTLCommandBuffer(id<MTLCommandBuffer> mtlCmdBuff);
 	VkResult commitActiveMTLCommandBuffer(bool signalCompletion = false);
 	void finish() override;
+	void reserveSemaphoreValues();
 	virtual void submitCommandBuffers() {}
 
 	MVKCommandEncodingContext _encodingContext;
