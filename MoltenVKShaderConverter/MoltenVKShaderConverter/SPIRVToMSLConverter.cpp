@@ -21,6 +21,7 @@
 #include "MVKStrings.h"
 #include "FileSupport.h"
 #include "SPIRVSupport.h"
+#include <algorithm>
 #include <fstream>
 
 using namespace mvk;
@@ -343,9 +344,20 @@ MVK_PUBLIC_SYMBOL bool SPIRVToMSLConverter::convert(SPIRVToMSLConversionConfigur
 			pMSLCompiler->add_msl_shader_output(so.shaderVar);
 		}
 
+		// Framebuffer fetch reads the color attachment of the input attachment index,
+		// which a texture index remapping the binding would replace.
+		std::vector<std::pair<uint32_t, uint32_t>> fetchedInputs;
+		if (shaderConfig.options.mslOptions.use_framebuffer_fetch_subpasses) {
+			for (auto& input : pMSLCompiler->get_shader_resources().subpass_inputs) {
+				fetchedInputs.emplace_back(pMSLCompiler->get_decoration(input.id, spv::DecorationDescriptorSet),
+										   pMSLCompiler->get_decoration(input.id, spv::DecorationBinding));
+			}
+		}
+
 		// Add resource bindings and hardcoded constexpr samplers
 		for (auto& rb : shaderConfig.resourceBindings) {
 			auto& rbb = rb.resourceBinding;
+			if (std::find(fetchedInputs.begin(), fetchedInputs.end(), std::make_pair(rbb.desc_set, rbb.binding)) != fetchedInputs.end()) { continue; }
 			if (rbb.stage == shaderConfig.options.entryPointStage) {
 				pMSLCompiler->add_msl_resource_binding(rbb);
 				if (rb.requiresConstExprSampler) {
