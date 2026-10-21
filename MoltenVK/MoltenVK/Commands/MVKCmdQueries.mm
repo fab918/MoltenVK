@@ -114,6 +114,7 @@ VkResult MVKCmdResetQueryPool::setContent(MVKCommandBuffer* cmdBuff,
 }
 
 void MVKCmdResetQueryPool::encode(MVKCommandEncoder* cmdEncoder) {
+    cmdEncoder->_occlusionQueryState.accumulate(cmdEncoder);
     cmdEncoder->resetQueries(_queryPool, _query, _queryCount);
     _queryPool->resetResults(_query, _queryCount, cmdEncoder);
 }

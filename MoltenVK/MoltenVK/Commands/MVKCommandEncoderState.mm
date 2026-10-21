@@ -1927,6 +1927,8 @@ struct alignas(8) QueryResultOffsets {
 
 // Metal resets the query counter at a render pass boundary, so copy results to the query pool's accumulation buffer.
 // Don't copy occlusion info until after rasterization, as Metal renderpasses can be ended prematurely during tessellation.
+// The copy is a compute pass, so it waits across render passes until the visibility buffer fills or the results are
+// needed: an app ending a query in every render pass would otherwise double the number of Metal passes.
 void MVKOcclusionQueryCommandEncoderState::endMetalRenderPass(MVKCommandEncoder* cmdEncoder) {
 	nextMetalQuery(cmdEncoder);
 	_metalVisibilityResultMode = MTLVisibilityResultModeDisabled;
@@ -2006,13 +2008,13 @@ void MVKOcclusionQueryCommandEncoderState::beginOcclusionQuery(MVKCommandEncoder
 
 void MVKOcclusionQueryCommandEncoderState::endOcclusionQuery(MVKCommandEncoder* cmdEncoder, MVKOcclusionQueryPool* pQueryPool, uint32_t query) {
 	assert(_currentPool == pQueryPool && _currentQueryIndex == query && "Ended query that wasn't active!");
-	_shouldAccumulate = true;
 	if (cmdEncoder->_mtlRenderEncoder) {
 		nextMetalQuery(cmdEncoder);
 		_metalVisibilityResultMode = VisibilityResultModeNeedsUpdate;
 	} else {
 		// Called outside of a render pass
 		// Run accumulation immediately
+		_shouldAccumulate = true;
 		endMetalRenderPass(cmdEncoder);
 	}
 	_currentVisibilityResultMode = MTLVisibilityResultModeDisabled;
@@ -2044,6 +2046,13 @@ void MVKOcclusionQueryCommandEncoderState::nextMetalQuery(MVKCommandEncoder* cmd
 	}
 }
 
+void MVKOcclusionQueryCommandEncoderState::accumulate(MVKCommandEncoder* cmdEncoder) {
+	if (_mtlRenderPassQueries.empty()) { return; }
+	_shouldAccumulate = true;
+	// Inside a render pass, accumulation runs when the pass ends.
+	if ( !cmdEncoder->_mtlRenderEncoder ) { endMetalRenderPass(cmdEncoder); }
+}
+
 void MVKOcclusionQueryCommandEncoderState::prepareHelperDraw(id<MTLRenderCommandEncoder> encoder, MVKCommandEncoder* mvkEncoder) {
 	if (_metalVisibilityResultMode != MTLVisibilityResultModeDisabled) {
 		nextMetalQuery(mvkEncoder);
@@ -2066,6 +2075,8 @@ void MVKOcclusionQueryCommandEncoderState::encode(id<MTLRenderCommandEncoder> en
 		if (_lastFenceUpdate != fence.write) {
 			_lastFenceUpdate = fence.write;
 			[encoder waitForFence:fence.prevRead beforeStages:MTLRenderStageFragment];
+			// The copy waits for the last update of the fence only: order earlier render passes whose results wait too.
+			if (hasPendingQueries()) { [encoder waitForFence:fence.write beforeStages:MTLRenderStageFragment]; }
 			[encoder  updateFence:fence.write     afterStages:MTLRenderStageFragment];
 		}
 	}
