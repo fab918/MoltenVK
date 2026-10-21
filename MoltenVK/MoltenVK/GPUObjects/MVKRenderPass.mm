@@ -89,6 +89,20 @@ bool MVKRenderSubpass::isColorAttachmentAlsoInputAttachment(uint32_t colorAttIdx
 	return false;
 }
 
+bool MVKRenderSubpass::readsInputAttachmentsFromColorAttachments() {
+	// Framebuffer fetch reads the Metal color attachment that has the input attachment index.
+	if (_inputAttachments.empty() || _isDynamicRendering || isMultiview() ||
+		!_renderPass->getMetalFeatures().tileBasedDeferredRendering ||
+		getSampleCount() != VK_SAMPLE_COUNT_1_BIT) { return false; }
+
+	for (uint32_t inIdx = 0; inIdx < _inputAttachments.size(); inIdx++) {
+		uint32_t rpAttIdx = _inputAttachments[inIdx].attachment;
+		if (rpAttIdx == VK_ATTACHMENT_UNUSED) { continue; }
+		if (inIdx >= _colorAttachments.size() || _colorAttachments[inIdx].attachment != rpAttIdx) { return false; }
+	}
+	return true;
+}
+
 VkFormat MVKRenderSubpass::getDepthFormat() {
 	return isDepthAttachmentUsed() ? _renderPass->_attachments[_depthAttachment.attachment].getFormat() : VK_FORMAT_UNDEFINED;
 }
