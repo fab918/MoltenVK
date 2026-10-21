@@ -544,6 +544,12 @@ public:
 
 	void prepareHelperDraw(id<MTLRenderCommandEncoder> encoder, MVKCommandEncoder* mvkEncoder);
 
+	/** Returns whether results of ended queries still wait in the Metal visibility buffer. */
+	bool hasPendingQueries() const { return !_mtlRenderPassQueries.empty(); }
+
+	/** Adds the waiting results to their query pools, at the end of the current render pass if any. */
+	void accumulate(MVKCommandEncoder* cmdEncoder);
+
 private:
 	/** Advances to the next index in the Metal visibility buffer. */
 	void nextMetalQuery(MVKCommandEncoder* cmdEncoder);
@@ -580,7 +586,8 @@ private:
 	uint8_t _metalVisibilityResultMode = MTLVisibilityResultModeDisabled;
 	/// The number of fences that need to be waited on by the result copy shader.
 	uint8_t _numCopyFences = 0;
-	/// If true, accumulation will be run at the end of the next render pass.
+	/// If true, accumulation will be run at the end of the next render pass. Otherwise results
+	/// wait in the visibility buffer until it fills or they are needed, see accumulate().
 	bool _shouldAccumulate = false;
 };
 

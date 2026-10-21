@@ -466,6 +466,8 @@ void MVKCommandEncoder::encodeCommandsImpl(MVKCommand* command) {
 
 void MVKCommandEncoder::endEncoding() {
 	endCurrentMetalEncoding();
+	_occlusionQueryState.accumulate(this);
+	endCurrentMetalEncoding();
 	finishQueries();
 }
 
@@ -787,7 +789,10 @@ void MVKCommandEncoder::beginMetalRenderPass(MVKCommandUse cmdUse) {
 		}
 		// Track the starting visibility offset for this Metal render pass so wrap detection compares
 		// against the correct baseline even when the buffer was already partially consumed.
-		_pEncodingContext->firstVisibilityResultOffsetInRenderPass = _pEncodingContext->visibilityResultBuffer.offset();
+		// Results of earlier render passes still waiting for accumulation keep their own baseline.
+		if ( !_occlusionQueryState.hasPendingQueries() ) {
+			_pEncodingContext->firstVisibilityResultOffsetInRenderPass = _pEncodingContext->visibilityResultBuffer.offset();
+		}
 		mtlRPDesc.visibilityResultBuffer = _pEncodingContext->visibilityResultBuffer.buffer();
 	}
 	_hasMTLRenderEncoderVisibilityResultBuffer = (mtlRPDesc.visibilityResultBuffer != nil);

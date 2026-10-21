@@ -164,6 +164,9 @@ void MVKQueryPool::encodeCopyResults(MVKCommandEncoder* cmdEncoder,
 
 	if (queryCount == 0) { return; }
 
+	// Copies read the accumulated results.
+	cmdEncoder->_occlusionQueryState.accumulate(cmdEncoder);
+
 	// If this asked for 64-bit results with no availability and packed stride, then we can do
 	// a straight copy. Otherwise, we need a shader.
 	if (mvkIsAnyFlagEnabled(flags, VK_QUERY_RESULT_64_BIT) &&
