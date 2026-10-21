@@ -178,8 +178,19 @@ void MVKCmdPipelineBarrier<N>::encode(MVKCommandEncoder* cmdEncoder) {
 	// During subpass changes, or with dynamic rendering, if an input attachment is being used,
 	// both VK_DEPENDENCY_BY_REGION_BIT and VK_ACCESS_INPUT_ATTACHMENT_READ_BIT will be set.
 	if (cmdEncoder->_mtlRenderEncoder && mtlFeats.tileBasedDeferredRendering) {
+		// Shaders read the input attachments of such a subpass from tile memory, where earlier draws
+		// are already visible, so only other reads of the attachments need a new Metal renderpass.
+		static constexpr VkAccessFlags kMVKTileAccess = (VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
+														 VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+														 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+		MVKRenderSubpass* subpass = cmdEncoder->getSubpass();
+		bool readsFromTile = subpass && subpass->readsInputAttachmentsFromColorAttachments();
 		bool needsRenderpassRestart = false;
 		for (auto& b : _barriers) {
+			if (readsFromTile && b.type == MVKPipelineBarrier::Memory &&
+				!mvkIsAnyFlagEnabled(b.dstAccessMask, ~kMVKTileAccess)) {
+				continue;
+			}
 			if (b.type == MVKPipelineBarrier::Image && b.newLayout == VK_IMAGE_LAYOUT_GENERAL) {
 				needsRenderpassRestart = true;
 				break;

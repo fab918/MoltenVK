@@ -2101,6 +2101,8 @@ void MVKGraphicsPipeline::initShaderConversionConfig(SPIRVToMSLConversionConfigu
 		}
 	}
 
+	shaderConfig.options.mslOptions.use_framebuffer_fetch_subpasses = (pCreateInfo->renderPass &&
+		((MVKRenderPass*)pCreateInfo->renderPass)->getSubpass(pCreateInfo->subpass)->readsInputAttachmentsFromColorAttachments());
 	shaderConfig.options.mslOptions.ios_support_base_vertex_instance = mtlFeats.baseVertexInstanceDrawing;
 	shaderConfig.options.mslOptions.texture_1D_as_2D = mvkCfg.texture1DAs2D;
 	shaderConfig.options.mslOptions.enable_point_size_builtin = isRenderingPoints() || reflectData.pointMode;

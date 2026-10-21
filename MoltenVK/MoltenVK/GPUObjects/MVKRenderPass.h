@@ -69,6 +69,12 @@ public:
 	/** Returns whether or not the color attachment is used as both a color attachment and an input attachment. */
 	bool isColorAttachmentAlsoInputAttachment(uint32_t colorAttIdx);
 
+	/**
+	 * Returns whether every input attachment of this subpass is the color attachment at the same index,
+	 * so shaders read them from tile memory through framebuffer fetch instead of from the texture.
+	 */
+	bool readsInputAttachmentsFromColorAttachments();
+
 	/** Returns whether or not the depth attachment is being used. */
 	bool isDepthAttachmentUsed() const { return _depthAttachment.attachment != VK_ATTACHMENT_UNUSED; }
 
